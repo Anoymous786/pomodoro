@@ -1,0 +1,270 @@
+1: "use client";
+2: 
+3: import { useEffect, useState } from "react";
+4: import { CheckCircle2, HelpCircle, Loader2, X } from "lucide-react";
+5: import { apiPost } from "@/lib/api";
+6: 
+7: export interface PendingCheckInData {
+8:   taskId: string;
+9:   stepId: string;
+10:   stepTitle: string;
+11:   topic: string;
+12:   completedBy: "timer" | "manual";
+13: }
+14: 
+15: /** Object shape passed to completeStep. */
+16: export interface CheckInAnswer {
+17:   question: string;
+18:   options?: string[];
+19:   answer: string;
+20:   correct: boolean;
+21:   passed: boolean;
+22:   explanation?: string;
+23:   /** True when the user marked done WITHOUT answering (unverified). */
+24:   skipped?: boolean;
+25:   /** §P2: difficulty of the question asked. */
+26:   difficulty?: "easy" | "medium" | "hard";
+27:   /** §P5: which step/task the question was drawn from. */
+28:   source?: string;
+29: }
+30: 
+31: interface GeneratedCheckIn {
+32:   question: string;
+33:   options: string[];
+34:   correctIndex: number;
+35:   explanation?: string;
+36:   /** §P2: mix difficulty in check-ins. */
+37:   difficulty?: "easy" | "medium" | "hard";
+38:   /** §P5: which step/task the question was drawn from. */
+39:   source?: string;
+40: }
+41: 
+42: interface CheckInModalProps {
+43:   pending: PendingCheckInData;
+44:   onCancel: () => void;
+45:   onAnswer: (answer: CheckInAnswer) => void;
+46: }
+47: 
+48: /**
+49:  * §11 per-step check-in modal. Asks ONE short MCQ specific to the step's topic
+50:  * to confirm genuine understanding before the step is marked done. If the LLM
+51:  * is unavailable, a graceful fallback still lets the learner progress (the
+52:  * answer is recorded as "unverified") so a provider outage never hard-blocks.
+53:  */
+54: export default function CheckInModal({
+55:   pending,
+56:   onCancel,
+57:   onAnswer,
+58: }: CheckInModalProps) {
+59:   const [q, setQ] = useState<GeneratedCheckIn | null>(null);
+60:   const [loading, setLoading] = useState(true);
+61:   const [error, setError] = useState<string | null>(null);
+62:   const [selected, setSelected] = useState<number | null>(null);
+63:   const [busy, setBusy] = useState(false);
+64: 
+65:   useEffect(() => {
+66:     let cancelled = false;
+67:     setLoading(true);
+68:     setError(null);
+69:     const load = async () => {
+70:       try {
+71:         const res = await apiPost("/api/generate-checkin", {
+72:           stepTitle: pending.stepTitle,
+73:           topic: pending.topic,
+74:         });
+75:         const data = (await res.json()) as {
+76:           checkIn?: GeneratedCheckIn;
+77:           error?: string;
+78:         };
+79:         if (cancelled) return;
+80:         if (!res.ok || !data.checkIn) {
+81:           throw new Error(data.error ?? "Couldn't prepare the check-in.");
+82:         }
+83:         setQ(data.checkIn);
+84:       } catch (e) {
+85:         if (cancelled) return;
+86:         setError(e instanceof Error ? e.message : "Check-in unavailable.");
+87:       } finally {
+88:         if (!cancelled) setLoading(false);
+89:       }
+90:     };
+91:     load();
+92:     return () => {
+93:       cancelled = true;
+94:     };
+95:   }, [pending.stepId, pending.stepTitle, pending.topic]);
+96:   const grade = (): CheckInAnswer => {
+97:     if (!q || selected === null) {
+98:       return {
+99:         question: q?.question ?? "",
+100:         answer: "(skipped — unverified)",
+101:         correct: false,
+102:         passed: true,
+103:         skipped: true,
+104:         explanation: "Marked done without answering the check-in.",
+105:       };
+106:     }
+107:     const pick = selected;
+108:     const correct = pick === q.correctIndex;
+109:     return {
+110:       question: q.question,
+111:       options: q.options,
+112:       answer: q.options[pick] ?? "",
+113:       correct,
+114:       passed: true, // quick gate nudges, never hard-blocks — recorded for skill profile
+115:       // §P2: show explanation on BOTH correct and wrong answers (generated
+116:       // inline with the question — no second round-trip).
+117:       explanation: q.explanation,
+118:       difficulty: q.difficulty,
+119:       source: q.source,
+120:     };
+121:   };
+122: 
+123:   const submit = () => {
+124:     if (!q) return;
+125:     setBusy(true);
+126:     onAnswer(grade());
+127:   };
+128: 
+129:   return (
+130:     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+131:       <div
+132:         data-testid="checkin-modal"
+133:         className="flex max-h-[90vh] w-full max-w-md flex-col rounded-2xl border border-white/10 bg-surface p-5 shadow-2xl"
+134:       >
+135:         <div className="mb-4 flex items-start justify-between gap-2">
+136:           <div className="flex items-start gap-2">
+137:             <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg bg-habeet-500/15 text-habeet-300 ring-1 ring-habeet-400/30">
+138:               <HelpCircle className="h-4 w-4" />
+139:             </div>
+140:             <div>
+141:               <h2 className="text-sm font-semibold text-gray-50">
+142:                 Quick check
+143:               </h2>
+144:               <p className="text-xs text-gray-400">
+145:                 Confirm you understood “{pending.stepTitle}” before marking it
+146:                 done.
+147:               </p>
+148:             </div>
+149:           </div>
+150:           <button
+151:             onClick={onCancel}
+152:             aria-label="Close check-in"
+153:             className="rounded-md p-1 text-gray-400 outline-none transition hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-habeet-400"
+154:           >
+155:             <X className="h-4 w-4" />
+156:           </button>
+157:         </div>
+158: 
+159:         {loading && (
+160:           <div className="flex flex-col items-center gap-3 py-6 text-center">
+161:             <Loader2 className="h-7 w-7 animate-spin text-habeet-500" />
+162:             <p className="text-sm text-gray-400">Preparing your question…</p>
+163:           </div>
+164:         )}
+165: 
+166:         {!loading && error && (
+167:           <div className="py-4 text-center">
+168:             <p className="mb-3 text-sm text-amber-300">{error}</p>
+169:           </div>
+170:         )}
+171:         {!loading && !error && q && (
+172:           <>
+173:             <div className="mb-1 flex items-center gap-2">
+174:               <p className="mb-3 text-sm font-medium leading-snug text-gray-100">
+175:                 {q.question}
+176:               </p>
+177:               {q.difficulty && (
+178:                 <span
+179:                   className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
+180:                     q.difficulty === "easy"
+181:                       ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30"
+182:                       : q.difficulty === "medium"
+183:                       ? "bg-amberAccent-500/15 text-amberAccent-300 ring-1 ring-amberAccent-400/30"
+184:                       : "bg-red-500/15 text-red-300 ring-1 ring-red-400/30"
+185:                   }`}
+186:                 >
+187:                   {q.difficulty}
+188:                 </span>
+189:               )}
+190:             </div>
+191:             <div className="space-y-2">
+192:               {q.options.map((opt, i) => {
+193:                 const picked = selected === i;
+194:                 return (
+195:                   <button
+196:                     key={i}
+197:                     type="button"
+198:                     onClick={() => setSelected(i)}
+199:                     data-testid={`checkin-option-${i}`}
+200:                     className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-sm transition ${
+201:                       picked
+202:                         ? "border-habeet-500 bg-habeet-500/10 text-gray-50"
+203:                         : "border-white/10 bg-surface-overlay/40 text-gray-300 hover:bg-white/5"
+204:                     }`}
+205:                   >
+206:                     <span
+207:                       className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] ${
+208:                         picked
+209:                           ? "border-habeet-400 text-habeet-200"
+210:                           : "border-white/20"
+211:                       }`}
+212:                     >
+213:                       {picked ? (
+214:                         <CheckCircle2 className="h-3.5 w-3.5" />
+215:                       ) : (
+216:                         String.fromCharCode(65 + i)
+217:                       )}
+218:                     </span>
+219:                     {opt}
+220:                   </button>
+221:                 );
+222:               })}
+223:             </div>
+224:             {/* §P5: traceability — show what the question was drawn from. */}
+225:             {q.source && (
+226:               <p className="mt-2 text-[10px] italic text-gray-500">
+227:                 based on: {q.source}
+228:               </p>
+229:             )}
+230:             <p className="mt-3 text-[11px] text-gray-500">
+231:               One quick question — your answer feeds your skill profile.
+232:             </p>
+233:           </>
+234:         )}
+235: 
+236:         <div className="mt-5 flex items-center justify-end gap-2 border-t border-white/10 pt-4">
+237:           <button
+238:             onClick={onCancel}
+239:             className="rounded-lg px-3 py-2 text-sm text-gray-400 transition hover:text-gray-200"
+240:           >
+241:             Not now
+242:           </button>
+243:           {/* Skip is ALWAYS available once loaded — a provider outage or a
+244:               tough question must never hard-block genuine progress. The
+245:               answer is recorded as unverified and still feeds the profile. */}
+246:           {!loading && (
+247:             <button
+248:               onClick={() => onAnswer(grade())}
+249:               data-testid="checkin-skip"
+250:               className="rounded-lg bg-surface-overlay px-4 py-2 text-sm text-gray-200 ring-1 ring-white/10 transition hover:bg-white/5"
+251:             >
+252:               Mark done anyway (unverified)
+253:             </button>
+254:           )}
+255:           {!loading && q && (
+256:             <button
+257:               onClick={submit}
+258:               disabled={selected === null || busy}
+259:               data-testid="checkin-submit"
+260:               className="rounded-lg bg-habeet-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-habeet-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+261:             >
+262:               {busy ? "Confirming…" : "Mark done"}
+263:             </button>
+264:           )}
+265:         </div>
+266:       </div>
+267:     </div>
+268:   );
+269: }
+270: 

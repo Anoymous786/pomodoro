@@ -2,9 +2,28 @@ import {
   DEFAULT_SETTINGS,
   DEFAULT_TIMER,
   PomodoroAppState,
+  PracticeTask,
   STORAGE_KEY,
   Task,
 } from "./types";
+import { normalizeRoadmap } from "./task-roadmap";
+
+/**
+ * Normalizes a raw practice task from localStorage so its embedded
+ * roadmap is always a valid RoadmapStep[] (Task + Roadmap architecture).
+ * Tasks saved before roadmaps existed get `roadmap: []`.
+ */
+function normalizePracticeTask(raw: PracticeTask): PracticeTask {
+  return { ...raw, roadmap: normalizeRoadmap(raw.roadmap) };
+}
+
+function normalizePracticeTasks(
+  parsed: Partial<PomodoroAppState>
+): PracticeTask[] {
+  return Array.isArray(parsed.practiceTasks)
+    ? parsed.practiceTasks.map(normalizePracticeTask)
+    : [];
+}
 
 /**
  * Normalizes a raw task from localStorage so it always has the
@@ -44,8 +63,27 @@ function normalizeTask(raw: Partial<Task> & { completed?: boolean }): Task {
  */
 function normalizeState(parsed: Partial<PomodoroAppState>): Partial<PomodoroAppState> {
   const timer = parsed.timer ?? { ...DEFAULT_TIMER };
+  // v2 Fix 5: migrate legacy placeholder history labels. Old builds logged
+  // generic names like "General focus work"; genuine no-roadmap sessions are
+  // now labeled "Unplanned focus session", and roadmap-backed entries keep
+  // their real topic·day labeling at render time (lib/history-labels.ts).
+  const LEGACY_GENERIC = "general focus work";
+  const history = Object.fromEntries(
+    Object.entries(parsed.history ?? {}).map(([key, stats]) => [
+      key,
+      {
+        ...stats,
+        completed_items: (stats.completed_items ?? []).map((c) =>
+          c.name.trim().toLowerCase() === LEGACY_GENERIC && !c.roadmapId
+            ? { ...c, name: "Unplanned focus session" }
+            : c
+        ),
+      },
+    ])
+  );
   return {
     ...parsed,
+    history,
     timer: {
       mode: timer.mode ?? DEFAULT_TIMER.mode,
       isRunning: timer.isRunning ?? false,
@@ -53,6 +91,9 @@ function normalizeState(parsed: Partial<PomodoroAppState>): Partial<PomodoroAppS
       completedWorkSessions: timer.completedWorkSessions ?? 0,
       activeTaskId: timer.activeTaskId ?? null,
       taskDurationMinutes: timer.taskDurationMinutes ?? null,
+      pausedMs: timer.isRunning ? null : (timer.pausedMs ?? null),
+      accruedMs: timer.accruedMs ?? 0,
+      runStartAt: timer.isRunning ? (timer.runStartAt ?? null) : null,
     },
     tasks: (parsed.tasks ?? []).map((t) => normalizeTask(t)),
   };
@@ -97,6 +138,11 @@ export function createEmptyState(
     roadmaps: [],
     badges: [],
     activeRoadmapDay: null,
+    practiceTasks: [],
+    estimationLog: [],
+    skillProfiles: {},
+    roadmapExamResults: {},
+    failureTracker: {},
   };
 }
 
@@ -163,6 +209,11 @@ export function loadState(): PomodoroAppState {
         roadmaps: parsed.roadmaps ?? [],
         badges: parsed.badges ?? [],
         activeRoadmapDay: null,
+        practiceTasks: normalizePracticeTasks(parsed),
+        estimationLog: parsed.estimationLog ?? [],
+        skillProfiles: parsed.skillProfiles ?? {},
+        roadmapExamResults: parsed.roadmapExamResults ?? {},
+        failureTracker: parsed.failureTracker ?? {},
       };
     }
 
@@ -175,6 +226,11 @@ export function loadState(): PomodoroAppState {
       roadmaps: parsed.roadmaps ?? [],
       badges: parsed.badges ?? [],
       activeRoadmapDay: parsed.activeRoadmapDay ?? null,
+      practiceTasks: normalizePracticeTasks(parsed),
+      estimationLog: parsed.estimationLog ?? [],
+      skillProfiles: parsed.skillProfiles ?? {},
+      roadmapExamResults: parsed.roadmapExamResults ?? {},
+      failureTracker: parsed.failureTracker ?? {},
     };
   } catch {
     return createEmptyState();

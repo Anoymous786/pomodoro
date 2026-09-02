@@ -46,11 +46,19 @@ export async function POST(req: NextRequest) {
       "level",
       "deadline",
       "constraints",
+      "days_requested",
     ] as const) {
       const v = c[key];
       if (typeof v === "string" && v.trim()) {
         context[key] = v.trim().slice(0, 500);
       }
+    }
+    // Phase B concrete numbers (parsed client-side during intake).
+    if (typeof c.minutes_per_day === "number" && c.minutes_per_day > 0) {
+      context.minutes_per_day = Math.round(c.minutes_per_day);
+    }
+    if (typeof c.days_count === "number" && c.days_count >= 1) {
+      context.days_count = Math.floor(c.days_count);
     }
     if (typeof c.resumeText === "string" && c.resumeText.trim()) {
       context.resumeText = c.resumeText.trim().slice(0, 8000);

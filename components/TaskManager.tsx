@@ -1,8 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import {
   Check,
+  ChevronDown,
   Clock,
   GraduationCap,
   Pencil,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 import { effectiveMinutes, Priority, Task } from "@/lib/types";
 import { showToast } from "@/lib/toast";
+import CircleCheckbox from "@/components/habeet/CircleCheckbox";
 
 interface TaskManagerProps {
   tasks: Task[];
@@ -27,18 +29,21 @@ interface TaskManagerProps {
   onStartTask: (id: string) => void;
   /** Re-opens a completed task's exam for review. */
   onReviewExam?: (id: string) => void;
+  /** Â§5 Resume-flow: when set, this task's row pulses + scrolls into view. */
+  highlightName?: string | null;
 }
 
-const PRIORITY_OPTIONS: { value: Priority; label: string; dot: string }[] = [
-  { value: "high", label: "High", dot: "bg-red-500" },
-  { value: "medium", label: "Medium", dot: "bg-yellow-500" },
-  { value: "low", label: "Low", dot: "bg-green-500" },
+const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
+  { value: "high", label: "High" },
+  { value: "medium", label: "Medium" },
+  { value: "low", label: "Low" },
 ];
 
+/* Semantic priority hues â€” deliberately NOT the accent color and NOT red. */
 const PRIORITY_DOT: Record<Priority, string> = {
-  high: "bg-red-500",
-  medium: "bg-yellow-500",
-  low: "bg-green-500",
+  high: "bg-orange-400 ring-1 ring-orange-300/40",
+  medium: "bg-sky-400 ring-1 ring-sky-300/40",
+  low: "bg-emerald-400 ring-1 ring-emerald-300/40",
 };
 
 export default function TaskManager({
@@ -53,6 +58,7 @@ export default function TaskManager({
   onEditMinutes,
   onStartTask,
   onReviewExam,
+  highlightName,
 }: TaskManagerProps) {
   const [name, setName] = useState("");
   const [priority, setPriority] = useState<Priority>("medium");
@@ -63,6 +69,8 @@ export default function TaskManager({
   const [editPriority, setEditPriority] = useState<Priority>("medium");
   const [minutesEditId, setMinutesEditId] = useState<string | null>(null);
   const [minutesEditValue, setMinutesEditValue] = useState("");
+  /** Phase D: id of the task whose per-task mini-dashboard is expanded. */
+  const [detailOpenId, setDetailOpenId] = useState<string | null>(null);
 
   const handleAdd = () => {
     const trimmed = name.trim();
@@ -75,7 +83,6 @@ export default function TaskManager({
     try {
       const mins = parseInt(estimatedMinutes, 10);
       onAdd(trimmed, priority, Number.isFinite(mins) && mins > 0 ? mins : 25);
-      // Clear only after the add succeeded so a failure never loses input.
       setName("");
       setPriority("medium");
       setEstimatedMinutes("25");
@@ -102,13 +109,13 @@ export default function TaskManager({
     setEditingId(null);
   };
 
-  const cancelEdit = () => {
-    setEditingId(null);
-  };
+  const cancelEdit = () => setEditingId(null);
 
   const startMinutesEdit = (task: Task) => {
     setMinutesEditId(task.id);
-    setMinutesEditValue(String(effectiveMinutes(task.estimated_minutes, task.manual_minutes)));
+    setMinutesEditValue(
+      String(effectiveMinutes(task.estimated_minutes, task.manual_minutes))
+    );
     setEditingId(null);
   };
 
@@ -121,24 +128,23 @@ export default function TaskManager({
     setMinutesEditId(null);
   };
 
+
   const totalEffective = tasks.reduce(
     (sum, t) => sum + effectiveMinutes(t.estimated_minutes, t.manual_minutes),
     0
   );
 
   return (
-    <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
-          {"Today's Tasks"}
-        </h2>
+        <section data-testid="today-card" className="rounded-2xl bg-surface p-5 ring-1 ring-white/5">
+      {/* Card header â€” title + quiet metadata */}
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <h2 className="text-base font-semibold text-gray-100">Today</h2>
         <div className="flex items-center gap-2">
-          <span className="rounded-full bg-tomato-100 px-3 py-1 text-xs font-semibold text-tomato-700 dark:bg-tomato-900/40 dark:text-tomato-300">
-            Tasks Completed: {tasksCompleted}/{totalTasks}
+          <span className="rounded-full bg-habeet-500/15 px-3 py-1 text-[11px] font-semibold text-habeet-200 tabular-nums">
+            {tasksCompleted}/{totalTasks} done
           </span>
-          <span className="hidden items-center gap-1 rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700 sm:flex dark:bg-sky-900/40 dark:text-sky-300">
-            <Clock className="h-3.5 w-3.5" />
-            {totalEffective} min total
+          <span className="hidden items-center gap-1 text-[11px] font-medium text-gray-500 sm:flex">
+            <Clock className="h-3 w-3" />~{totalEffective} min
           </span>
         </div>
       </div>
@@ -151,14 +157,15 @@ export default function TaskManager({
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleAdd()}
           placeholder="Add a new task..."
-          className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-tomato-500 focus:ring-2 focus:ring-tomato-500/30 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+          data-testid="task-input"
+          className="flex-1 rounded-xl border border-white/10 bg-surface-raised px-3 py-2 text-sm text-gray-100 placeholder-gray-500 outline-none transition focus:border-habeet-500 focus:ring-2 focus:ring-habeet-500/30"
         />
         <div className="flex flex-wrap gap-2">
           <select
             value={priority}
             onChange={(e) => setPriority(e.target.value as Priority)}
             aria-label="Task priority"
-            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-tomato-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+            className="rounded-xl border border-white/10 bg-surface-raised px-3 py-2 text-sm text-gray-200 outline-none transition focus:border-habeet-500"
           >
             {PRIORITY_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -166,7 +173,7 @@ export default function TaskManager({
               </option>
             ))}
           </select>
-          <div className="flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
+          <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-surface-raised px-2 py-1 text-sm text-gray-200">
             <input
               type="number"
               min={1}
@@ -175,11 +182,12 @@ export default function TaskManager({
               aria-label="Estimated minutes"
               className="w-12 bg-transparent text-center outline-none"
             />
-            <span className="text-xs text-gray-500">min</span>
+            <span className="text-[11px] text-gray-500">min</span>
           </div>
           <button
             onClick={handleAdd}
-            className="flex items-center gap-1 rounded-lg bg-tomato-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-tomato-700 active:scale-95"
+            className="btn-primary px-4 py-2 text-sm"
+            data-testid="task-add-btn"
           >
             <Plus className="h-4 w-4" />
             Add
@@ -190,7 +198,7 @@ export default function TaskManager({
       {addError && (
         <p
           role="alert"
-          className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-900/30 dark:text-red-300"
+          className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300 ring-1 ring-red-500/30"
         >
           {addError}
         </p>
@@ -198,7 +206,7 @@ export default function TaskManager({
 
       {/* Task list */}
       {tasks.length === 0 ? (
-        <p className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+        <p className="py-6 text-center text-sm text-gray-500">
           No tasks yet. Add one above to get started!
         </p>
       ) : (
@@ -214,30 +222,25 @@ export default function TaskManager({
             return (
               <li
                 key={task.id}
-                className={`group flex items-center gap-3 rounded-lg border px-3 py-2.5 transition ${
+                                data-task-name={task.name}
+                data-testid={`task-row-${task.name.replace(/\s+/g, "_")}`}
+                className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 ring-1 transition ${
                   isActiveTask
-                    ? "border-tomato-300 bg-tomato-50 dark:border-tomato-700 dark:bg-tomato-900/20"
-                    : "border-gray-100 bg-gray-50 hover:border-gray-200 dark:border-gray-700 dark:bg-gray-900"
+                    ? "bg-habeet-500/10 ring-habeet-500/40"
+                    : "bg-surface-raised ring-white/5 hover:bg-surface-overlay"
+                } ${
+                  highlightName && task.name === highlightName
+                    ? "!ring-2 !ring-habeet-400 animate-pulse"
+                    : ""
                 }`}
               >
-                {/* Priority dot */}
-                <span
-                  className={`h-2.5 w-2.5 shrink-0 rounded-full ${PRIORITY_DOT[task.priority]}`}
-                  aria-label={`${task.priority} priority`}
+                                {/* Circular checkbox (§0 + §6) â€” marks task done */}
+                <CircleCheckbox
+                  checked={task.is_completed}
+                  onChange={() => onToggle(task.id)}
+                  label={task.name}
+                  data-testid={`task-checkbox-${task.name.replace(/\s+/g, "_")}`}
                 />
-
-                {/* Checkbox */}
-                <button
-                  onClick={() => onToggle(task.id)}
-                  aria-label={task.is_completed ? "Mark incomplete" : "Mark complete"}
-                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition ${
-                    task.is_completed
-                      ? "border-tomato-600 bg-tomato-600 text-white"
-                      : "border-gray-300 bg-white hover:border-tomato-500 dark:border-gray-600 dark:bg-gray-800"
-                  }`}
-                >
-                  {task.is_completed && <Check className="h-3.5 w-3.5" />}
-                </button>
 
                 {/* Task name + minutes */}
                 {isEditing ? (
@@ -248,7 +251,7 @@ export default function TaskManager({
                       onChange={(e) => setEditName(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && saveEdit()}
                       autoFocus
-                      className="flex-1 rounded border border-tomato-500 bg-white px-2 py-1 text-sm text-gray-900 outline-none dark:bg-gray-800 dark:text-gray-100"
+                      className="flex-1 rounded-lg border border-habeet-500 bg-surface-overlay px-2 py-1 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-habeet-500/40"
                     />
                     <select
                       value={editPriority}
@@ -256,7 +259,7 @@ export default function TaskManager({
                         setEditPriority(e.target.value as Priority)
                       }
                       aria-label="Edit priority"
-                      className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                      className="rounded-lg border border-white/10 bg-surface-raised px-2 py-1 text-xs text-gray-200 outline-none"
                     >
                       {PRIORITY_OPTIONS.map((opt) => (
                         <option key={opt.value} value={opt.value}>
@@ -267,14 +270,14 @@ export default function TaskManager({
                     <button
                       onClick={saveEdit}
                       aria-label="Save edit"
-                      className="rounded p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
+                      className="rounded p-1 text-gray-400 transition hover:bg-white/5 hover:text-gray-100"
                     >
                       <Check className="h-4 w-4" />
                     </button>
                     <button
                       onClick={cancelEdit}
                       aria-label="Cancel edit"
-                      className="rounded p-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      className="rounded p-1 text-gray-500 transition hover:bg-white/5 hover:text-gray-300"
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -283,8 +286,8 @@ export default function TaskManager({
                   <span
                     className={`flex-1 text-sm ${
                       task.is_completed
-                        ? "text-gray-400 line-through dark:text-gray-500"
-                        : "text-gray-800 dark:text-gray-100"
+                        ? "text-gray-500 line-through"
+                        : "text-gray-100"
                     }`}
                   >
                     {task.name}
@@ -298,13 +301,13 @@ export default function TaskManager({
                     {task.examResult && onReviewExam && (
                       <button
                         onClick={() => onReviewExam(task.id)}
-                        title={`Exam: ${task.examResult.score}% — ${
+                        title={`Exam: ${task.examResult.score}% â€” ${
                           task.examResult.passed ? "passed" : "needs review"
                         }`}
-                        className={`flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold transition ${
+                        className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold tabular-nums transition ${
                           task.examResult.passed
-                            ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300"
-                            : "bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-300"
+                            ? "bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25"
+                            : "bg-amber-500/15 text-amber-300 hover:bg-amber-500/25"
                         }`}
                       >
                         <GraduationCap className="h-3.5 w-3.5" />
@@ -312,7 +315,7 @@ export default function TaskManager({
                       </button>
                     )}
                     {isEditingMinutes ? (
-                      <div className="flex items-center gap-1 rounded-lg border border-tomato-500 bg-white px-1.5 py-0.5 dark:bg-gray-800">
+                      <div className="flex items-center gap-1 rounded-lg border border-habeet-500 bg-surface-overlay px-1.5 py-0.5">
                         <input
                           type="number"
                           min={1}
@@ -323,14 +326,13 @@ export default function TaskManager({
                             if (e.key === "Escape") setMinutesEditId(null);
                           }}
                           autoFocus
-                          aria-label="Edit minutes"
-                          className="w-12 bg-transparent text-center text-sm text-gray-900 outline-none dark:text-gray-100"
+                          className="w-12 bg-transparent text-center text-xs text-gray-100 outline-none"
                         />
-                        <span className="text-xs text-gray-500">min</span>
+                        <span className="text-[11px] text-gray-500">min</span>
                         <button
                           onClick={() => saveMinutesEdit(task)}
                           aria-label="Save minutes"
-                          className="rounded p-0.5 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
+                          className="rounded p-0.5 text-gray-400 transition hover:bg-white/5 hover:text-gray-100"
                         >
                           <Check className="h-3.5 w-3.5" />
                         </button>
@@ -340,49 +342,79 @@ export default function TaskManager({
                         onClick={() => startMinutesEdit(task)}
                         title="Edit estimated time"
                         aria-label={`Edit estimated time for ${task.name}`}
-                        className={`flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium transition ${
+                        className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium tabular-nums outline-none transition focus-visible:ring-2 focus-visible:ring-habeet-400/60 ${
                           task.manual_minutes != null
-                            ? "bg-sky-100 text-sky-700 hover:bg-sky-200 dark:bg-sky-900/40 dark:text-sky-300"
-                            : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+                            ? "bg-habeet-500/20 text-habeet-200 hover:bg-habeet-500/30"
+                            : "text-gray-400 hover:bg-white/5 hover:text-gray-200"
                         }`}
                       >
-                        <Clock className="h-3.5 w-3.5" />
-                        {effective} min
+                        <Clock className="h-3.5 w-3.5" />~{effective} min
                         <Pencil className="h-3 w-3 opacity-60" />
                       </button>
                     )}
                   </div>
                 )}
 
-                {/* Actions */}
+                {/* Actions â€” visible on hover/focus, always on touch */}
                 {!isEditing && !isEditingMinutes && (
-                  <div className="flex shrink-0 items-center gap-1 opacity-0 transition group-hover:opacity-100">
+                  <div className="flex shrink-0 items-center gap-1 transition focus-within:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
                     {!task.is_completed && (
                       <button
                         onClick={() => onStartTask(task.id)}
                         aria-label={`Start timer for ${task.name}`}
                         title="Start this task's timer"
-                        className="rounded p-1.5 text-tomato-600 hover:bg-tomato-50 dark:hover:bg-tomato-900/30"
+                        className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-habeet-300 outline-none transition hover:bg-habeet-500/15 focus-visible:ring-2 focus-visible:ring-habeet-400/60"
                       >
-                        <Play className="h-4 w-4" />
+                        <Play className="h-3.5 w-3.5" />
+                        Start
                       </button>
                     )}
                     <button
                       onClick={() => startEdit(task)}
                       aria-label="Edit task"
-                      className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-tomato-600 dark:hover:bg-gray-700"
+                      className="rounded p-1.5 text-gray-500 outline-none transition hover:bg-white/5 hover:text-gray-200 focus-visible:ring-2 focus-visible:ring-habeet-400/60"
                     >
-                      <Pencil className="h-4 w-4" />
+                      <Pencil className="h-3.5 w-3.5" />
                     </button>
                     <button
                       onClick={() => onDelete(task.id)}
                       aria-label="Delete task"
-                      className="rounded p-1.5 text-gray-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30"
+                      className="rounded p-1.5 text-gray-500 outline-none transition hover:bg-red-500/10 hover:text-red-300 focus-visible:ring-2 focus-visible:ring-red-400/50"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 )}
+{/* Phase D: per-task mini dashboard — time accuracy + exam
+                      accuracy, scoped to THIS task (never merged into the
+                      global Sessions / Focus Time / Tasks summary). */}
+                  {(task.is_completed ||
+                    task.examResult ||
+                    task.timingRecord) && (
+                    <div className="mt-2 flex w-full items-center justify-between border-t border-white/5 pt-2">
+                      <span className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
+                        Details
+                      </span>
+                      <button
+                        onClick={() =>
+                          setDetailOpenId((cur) =>
+                            cur === task.id ? null : task.id
+                          )
+                        }
+                        aria-expanded={detailOpenId === task.id}
+                        aria-label={`Toggle details for ${task.name}`}
+                        className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-habeet-300 outline-none transition hover:bg-habeet-500/15 focus-visible:ring-2 focus-visible:ring-habeet-400/60"
+                      >
+                        <span>{detailOpenId === task.id ? "Hide" : "Show"}</span>
+                        <ChevronDown
+                          className={`h-3.5 w-3.5 transition-transform ${
+                            detailOpenId === task.id ? "rotate-180" : ""
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  )}
+                  {detailOpenId === task.id && <PerTaskDetail task={task} />}
               </li>
             );
           })}
@@ -391,3 +423,83 @@ export default function TaskManager({
     </section>
   );
 }
+
+/**
+ * Phase D: expandable per-task mini-dashboard. Shows time accuracy (estimate
+ * vs actual + timing outcome) and exam accuracy for a single task. This lives
+ * ON the task — it is deliberately separate from the global Sessions / Focus
+ * Time / Tasks Completed summary.
+ */
+function PerTaskDetail({ task }: { task: Task }) {
+  const effective = effectiveMinutes(
+    task.estimated_minutes,
+    task.manual_minutes
+  );
+
+  const timing = task.timingRecord;
+  const outcomeLabel = (o: Task["timing_outcome"]) =>
+    o === "early"
+      ? "Early"
+      : o === "late"
+      ? "Late"
+      : o === "on-time"
+      ? "On time"
+      : "Unknown";
+
+  const outcomeClass =
+    task.timing_outcome === "on-time"
+      ? "text-emerald-400"
+      : task.timing_outcome === "early"
+      ? "text-sky-400"
+      : task.timing_outcome === "late"
+      ? "text-amber-400"
+      : "text-gray-400";
+
+  return (
+    <div
+      className="mt-2 grid w-full grid-cols-2 gap-3 rounded-xl bg-surface-overlay p-3 ring-1 ring-white/5"
+      data-testid={`task-detail-${task.name.replace(/\s+/g, "_")}`}
+    >
+      {/* Time accuracy */}
+      <div className="rounded-lg bg-surface-raised p-3">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+          Time accuracy
+        </p>
+        <p className={`mt-1 text-xs font-bold capitalize ${outcomeClass}`}>
+          {outcomeLabel(task.timing_outcome)}
+        </p>
+        <p className="mt-1 text-[11px] tabular-nums text-gray-400">
+          est. {effective}m
+          <span className="mx-1 text-gray-600">·</span>
+          actual {timing?.actual_minutes ?? task.actual_minutes ?? "—"}m
+        </p>
+      </div>
+
+      {/* Exam accuracy */}
+      <div className="rounded-lg bg-surface-raised p-3">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+          Exam accuracy
+        </p>
+        {task.examResult ? (
+          <>
+            <p
+              className={`mt-1 text-xs font-bold ${
+                task.examResult.passed
+                  ? "text-emerald-400"
+                  : "text-amber-400"
+              }`}
+            >
+              {task.examResult.score}%
+            </p>
+            <p className="mt-1 text-[11px] tabular-nums text-gray-400">
+              {task.examResult.correct}/{task.examResult.total} correct
+            </p>
+          </>
+        ) : (
+          <p className="mt-1 text-[11px] text-gray-500">Not taken yet</p>
+        )}
+      </div>
+    </div>
+  );
+}
+

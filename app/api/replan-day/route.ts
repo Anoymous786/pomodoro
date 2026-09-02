@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
 
   const budget =
     typeof obj.budget_minutes === "number" && obj.budget_minutes > 0
-      ? obj.budget_minutes
+      ? Math.round(obj.budget_minutes)
       : 0;
 
   if (budget <= 0) {
@@ -74,8 +74,39 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // §4.2 Optional re-plan context sent by the button — folded into the
+  // LLM prompt so the re-plan knows the topic/day, what's already done,
+  // how much time was logged, and which estimates are hand-tuned.
+  const topic = typeof obj.topic === "string" ? obj.topic.trim().slice(0, 200) : "";
+  const dayNumber =
+    typeof obj.day_number === "number" && Number.isFinite(obj.day_number)
+      ? Math.round(obj.day_number)
+      : undefined;
+  const stringList = (v: unknown): string[] | undefined =>
+    Array.isArray(v)
+      ? v
+          .filter((s): s is string => typeof s === "string" && !!s.trim())
+          .map((s) => s.trim().slice(0, 200))
+          .slice(0, 20)
+      : undefined;
+
   try {
-    const replan = await replanDay(tasks, budget);
+    const replan = await replanDay(tasks, budget, {
+      ...(topic ? { topic } : {}),
+      ...(dayNumber != null ? { dayNumber } : {}),
+      completedTasks: stringList(obj.completed_tasks),
+      spentMinutes:
+        typeof obj.spent_minutes === "number" &&
+        Number.isFinite(obj.spent_minutes) &&
+        obj.spent_minutes > 0
+          ? Math.round(obj.spent_minutes)
+          : undefined,
+      lockedTasks: stringList(obj.locked_tasks),
+      calibration:
+        typeof obj.calibration === "object" && obj.calibration !== null
+          ? (obj.calibration as Record<string, unknown>)
+          : undefined,
+    });
     return NextResponse.json({ tasks: replan.tasks });
   } catch (err) {
     const message =

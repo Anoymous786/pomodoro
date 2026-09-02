@@ -1,0 +1,242 @@
+export interface RoadmapStep {
+  id: string;
+  title: string;
+  /** Optional supporting note (sub-tasks, resources, reminders). */
+  note?: string;
+  /**
+   * Which plan day (1..durationDays) this step is scheduled for. Absent
+   * defaults to Day 1. A day automatically completes only when every step
+   * assigned to that day is done.
+   */
+  dayNumber?: number;
+  /**
+   * The AI-generated title of the plan day this step belongs to (e.g.
+   * "Django Introduction"). Used by the day-grouped roadmap UI; the first
+   * step of each day supplies the group header's title.
+   */
+  dayTitle?: string;
+  isDone: boolean;
+  /**
+   * User-set estimated duration in MINUTES ("2h" => 120, "45m" => 45).
+   * Absent/0 = not yet estimated. Totals derive from the sum over steps.
+   * Starting a step's timer requires an estimate (see the workspace UI).
+   */
+  estimated_minutes?: number;
+  /**
+   * Cumulative tackled/practiced time for this step, in SECONDS. Grows on
+   * every running tick and every completed timer run; survives reloads.
+   */
+  practicedSeconds: number;
+  /**
+   * Elapsed seconds in the CURRENT run only (live count-up). Resets to 0
+   * when a run finishes; merged into practicedSeconds on pause/finish.
+   */
+  elapsedSeconds: number;
+  /** Status of this step's own timer. */
+  timerStatus: "idle" | "running" | "paused" | "finished";
+  /** Epoch ms when the current run started (drives live elapsed). */
+  startedAt?: number;
+  /** Curated study sources for THIS exact step/topic (requirement §1). */
+  sources?: StepSource[];
+  /**
+   * Phase C: measured actual minutes spent once the step's timer genuinely
+   * finishes (or the user explicitly confirms done). Set at finish time from
+   * practicedSeconds; unset before a completing finish.
+   */
+  actual_minutes?: number;
+  /** Phase C: "early" | "on-time" | "late" derived vs the estimate. */
+  timing_outcome?: TimingOutcome;
+  /** Phase C: structured per-step timing record (scoped strictly to this step). */
+  timingRecord?: {
+    estimated_minutes: number;
+    actual_minutes: number;
+    timing_outcome: TimingOutcome;
+    completedAt: number;
+  };
+  /** Phase D: per-step exam questions generated from THIS step's content. */
+  exam?: {
+    stepName: string;
+    questions: ExamQuestion[];
+    createdAt: number;
+  };
+  /** Phase D: graded result of this step's last exam attempt. */
+  examResult?: TaskExamResult;
+  /**
+   * Phase E: a short, specific suggested search for this step (e.g. "video:
+   * Django ORM basics tutorial") turned into a YouTube search link.
+   */
+  search?: string;
+/**
+   * §10 Gating: a step is only genuinely COMPLETE when it has a completedAt
+   * timestamp set by an explicit completing action (real timer finish OR an
+   * explicit "Mark Done"). A bare checkbox flip must NOT set this, so the
+   * day/task auto-completion cascade can never trigger from a stray click.
+   */
+  completedAt?: number;
+  /** Whether completion came from the timer finishing ("timer") or an
+   *  explicit "Mark Done" ("manual"). Drives how strictly the per-step
+   *  check-in is required before progression. */
+  completedBy?: "timer" | "manual";
+  /**
+   * §11: per-step check-in. When a step is genuinely completed the user
+   * answers ONE short question specific to the step's topic before being
+   * allowed to move on. Correctness is stored here and feeds the persistent
+   * skill profile (lib/skills.ts) plus the roadmap-wide mock exam breakdown.
+   */
+  checkIn?: StepCheckIn;
+}
+/** §11: one short, per-step check-in (quick understanding gate). */
+export interface StepCheckIn {
+  question: string;
+  /** Choices for an MCQ; absent for a short-answer prompt. */
+  options?: string[];
+  /** The user's submitted answer text. */
+  answer: string;
+  /** Whether the submitted answer was marked correct. */
+  correct: boolean;
+  /** Grading threshold used (higher = stricter). */
+  passed: boolean;
+  /** Epoch ms the check-in was answered. */
+  answeredAt: number;
+  /** Optional supporting explanation returned to the learner. */
+  explanation?: string;
+  /** §P2: difficulty label of the question asked. */
+  difficulty?: "easy" | "medium" | "hard";
+  /** §P5: which step/task this question was drawn from. */
+  source?: string;
+}
+
+/** §12: one question in the FULL-ROADMAP mock exam (~20 MCQ). Carries an
+ * optional topic label so the result screen can report a per-day/per-topic
+ * breakdown ("Hooks: 4/5, Routing: 2/5"). Added fields (§P2):
+ *   - difficulty: "easy" | "medium" | "hard" — labelled mix per request
+ *   - explanation: shown inline on a wrong answer (generated in the same call)
+ *   - source: which roadmap task/day the question was drawn from (traceability). */
+export interface RoadmapExamQuestion {
+  id: string;
+  /** "Assets React" => topic slug "react" used for the skill profile. */
+  topic: string;
+  day_number?: number;
+  prompt: string;
+  options: string[];
+  referenceAnswer: string;
+  /** §P2: difficulty label. */
+  difficulty?: "easy" | "medium" | "hard";
+  /** §P2: short explanation — shown when the learner gets this wrong. */
+  explanation?: string;
+  /** §P5: which task/day this question was drawn from. */
+  source?: string;
+}
+
+/** §12: graded result of a full-roadmap mock exam. */
+export interface RoadmapExamResult {
+  score: number; // 0-20
+  pct: number; // 0-100
+  total: number; // == 20
+  passed: boolean;
+  /** Per-topic/per-day breakdown: "react" -> { correct, total }. */
+  breakdown: Record<string, { correct: number; total: number }>;
+  answers: Record<string, string>;
+  /** §P2: map of question id -> explanation shown when that answer was wrong. */
+  feedback?: Record<string, string>;
+  gradedAt: number;
+}
+
+/** §13: a persistent, per-topic skill score derived from check-ins + exams. */
+export interface SkillProfile {
+  /** Normalised topic id (lowercased, slugified), e.g. "react". */
+  topic: string;
+  /** Display name, e.g. "React". */
+  label: string;
+  /** 0-100 rolling score for this topic. */
+  score: number;
+  /** Number of mock-exam questions attempted in this topic. */
+  questionsAttempted: number;
+  /** Number answered correctly across check-ins + exams. */
+  correct: number;
+  /** Total counted answers (denominator for score). */
+  total: number;
+  /** Count of roadmap mock exams taken on this topic. */
+  examsTaken: number;
+  /** Epoch ms of the most recent update. */
+  lastUpdated: number;
+}
+
+/**
+ * v5 — a multi-day practice goal ("Learn Django in 7 days").
+ * Progress = how many of the N planned days the user checked in.
+ * Status is ALWAYS derived from dates in lib/practice.ts, never stored.
+ */
+export interface PracticeTask {
+  id: string;
+  name: string;
+  description?: string;
+  /** "YYYY-MM-DD" IST — Day 1. Defaults to creation day. */
+  startDate: string;
+  durationDays: number;
+    /** Checked-in day numbers (1..durationDays), order = completion order. */
+  checkIns: number[];
+  /**
+   * §5: when true the task is permanently marked Completed (all its
+   * roadmap steps were finished). Persisted so it survives reloads and
+   * the dashboard shows the correct completed-task count. Derived in
+   * lib/practice.ts but cached here to avoid recomputation + flickering.
+   */
+  is_completed?: boolean;
+  createdAt: number;
+  /**
+   * Task + Roadmap architecture: ordered roadmap steps belonging ONLY to
+   * this task. Absent ([]/undefined) for tasks created before roadmaps
+   * existed — normalized to [] at load time in lib/storage.ts.
+   */
+  roadmap?: RoadmapStep[];
+  /**
+   * Phase 2 (durable progress): server-side revision number for this task's
+   * PROGRESS# document in the DynamoDB `roadmaps` table. Undefined = never
+   * synced. The remote doc is authoritative when its rev is higher; writes
+   * are conditional (rev must increase) so stale tabs cannot silently
+   * overwrite newer progress. `syncedAt` is the last successful push time.
+   */
+  rev?: number;
+  syncedAt?: number;
+}
+
+export const STORAGE_KEY = "pomodoro:app:v1";
+
+export const DEFAULT_SETTINGS: Settings = {
+  workMinutes: 25,
+  shortBreakMinutes: 5,
+  longBreakMinutes: 15,
+  longBreakInterval: 4,
+  dailySessionGoal: 8,
+};
+
+export const DEFAULT_TIMER: TimerState = {
+  mode: "work",
+  isRunning: false,
+  endTimestamp: null,
+  completedWorkSessions: 0,
+  activeTaskId: null,
+  taskDurationMinutes: null,
+  pausedMs: null,
+  accruedMs: 0,
+  runStartAt: null,
+};
+
+export const MODE_LABELS: Record<TimerMode, string> = {
+  work: "Work Session",
+  shortBreak: "Short Break",
+  longBreak: "Long Break",
+};
+
+export const MODE_DURATION_MINUTES: Record<TimerMode, number> = {
+  work: DEFAULT_SETTINGS.workMinutes,
+  shortBreak: DEFAULT_SETTINGS.shortBreakMinutes,
+  longBreak: DEFAULT_SETTINGS.longBreakMinutes,
+};
+
+/**
+ * Returns the effective countdown duration (ms) for a timer state.
+ * Work sessions honour the active task's effective minutes when set;
+ * breaks fall back to the standard short/long break settings.
+ */

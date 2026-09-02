@@ -1,7 +1,8 @@
 "use client";
 
-import { Pause, Play, RotateCcw } from "lucide-react";
+import { Flame, Pause, Play, RotateCcw } from "lucide-react";
 import { MODE_LABELS, TimerMode } from "@/lib/types";
+import ProgressRing from "@/components/habeet/ProgressRing";
 
 interface TimerProps {
   mode: TimerMode;
@@ -13,13 +14,16 @@ interface TimerProps {
   onStart: () => void;
   onPause: () => void;
   onReset: () => void;
+  /** Quiet stat tiles inside the same card (§1 left column). */
+  currentStreak: number;
+  todayPct: number;
 }
 
 /**
- * Circular tomato graphic with a digital countdown in the center.
- * The ring progress is derived from remainingMs / durationMs.
- * While in work mode, the active task's name is shown above the
- * timer so it's clear which task is being timed.
+ * Habeet timer card: large purple progress ring (200px desktop / 150px
+ * mobile, same proportional stroke), time centered inside, mode label
+ * beneath, Start/Reset controls, then a 2-col row of quiet stat tiles
+ * (current streak · today's completion %).
  */
 export default function Timer({
   mode,
@@ -31,45 +35,32 @@ export default function Timer({
   onStart,
   onPause,
   onReset,
+  currentStreak,
+  todayPct,
 }: TimerProps) {
   const progress = durationMs > 0 ? remainingMs / durationMs : 0;
-  const circumference = 2 * Math.PI * 90; // r = 90
-  const dashOffset = circumference * (1 - progress);
-
-  const modeColor: Record<TimerMode, string> = {
-    work: "text-tomato-600",
-    shortBreak: "text-emerald-600",
-    longBreak: "text-sky-600",
-  };
-
-  const ringColor: Record<TimerMode, string> = {
-    work: "stroke-tomato-500",
-    shortBreak: "stroke-emerald-500",
-    longBreak: "stroke-sky-500",
-  };
-
-  const modeBadge: Record<TimerMode, string> = {
-    work: "bg-tomato-100 text-tomato-700",
-    shortBreak: "bg-emerald-100 text-emerald-700",
-    longBreak: "bg-sky-100 text-sky-700",
-  };
 
   const showTaskName =
     mode === "work" && activeTaskName && activeTaskName.trim().length > 0;
 
-  return (
-    <div className="flex w-full max-w-md flex-col items-center gap-5">
-      {/* Active task name banner */}
-      <div className="min-h-[2.5rem] w-full">
+    return (
+    <div
+      data-testid="timer-card"
+      className={`card-elevated flex h-full w-full flex-col items-center gap-5 p-5 ${
+        isRunning ? "shadow-glow" : ""
+      }`}
+    >
+      {/* Active task banner */}
+      <div className="min-h-[2.25rem] w-full">
         {showTaskName ? (
-          <div className="flex items-center justify-center gap-2 rounded-xl border border-tomato-200 bg-tomato-50 px-4 py-2 dark:border-tomato-800 dark:bg-tomato-900/30">
-            <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-tomato-500" />
-            <span className="truncate text-sm font-semibold text-tomato-800 dark:text-tomato-200">
+          <div className="flex items-center justify-center gap-2 rounded-xl bg-habeet-500/10 px-4 py-2 ring-1 ring-habeet-500/30">
+            <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-habeet-400" />
+            <span className="truncate text-sm font-semibold text-habeet-200">
               {activeTaskName}
             </span>
           </div>
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-gray-400 dark:text-gray-500">
+          <div className="flex h-full items-center justify-center text-center text-xs text-gray-500">
             {mode === "work"
               ? "No task selected — generic work session"
               : MODE_LABELS[mode]}
@@ -77,78 +68,106 @@ export default function Timer({
         )}
       </div>
 
-      {/* Circular tomato graphic */}
-      <div className="relative h-56 w-56 sm:h-64 sm:w-64">
-        <svg viewBox="0 0 200 200" className="h-full w-full -rotate-90">
-          {/* Track */}
-          <circle
-            cx="100"
-            cy="100"
-            r="90"
-            fill="none"
-            strokeWidth="10"
-            className="stroke-gray-200 dark:stroke-gray-700"
-          />
-          {/* Progress ring */}
-          <circle
-            cx="100"
-            cy="100"
-            r="90"
-            fill="none"
-            strokeWidth="10"
-            strokeLinecap="round"
-            className={`${ringColor[mode]} transition-all duration-500`}
-            strokeDasharray={circumference}
-            strokeDashoffset={dashOffset}
-          />
-        </svg>
-        {/* Tomato leaf accent */}
-        <div className="pointer-events-none absolute left-1/2 top-2 -translate-x-1/2">
-          <svg viewBox="0 0 40 24" className="h-6 w-10 fill-emerald-500">
-            <path d="M20 24 C 8 20, 2 12, 4 4 C 12 6, 18 10, 20 14 C 22 10, 28 6, 36 4 C 38 12, 32 20, 20 24 Z" />
-          </svg>
-        </div>
+      {/* Circular progress ring — 150px mobile → 200px desktop */}
+      <div className="relative h-[150px] w-[150px] lg:h-[200px] lg:w-[200px]">
+        <ProgressRing
+          progress={progress}
+          size={200}
+          strokeWidth={12}
+          className="!h-full !w-full"
+          title={`${MODE_LABELS[mode]} — ${Math.round(progress * 100)}% remaining`}
+          active={isRunning}
+        />
         {/* Center content */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
           <span
-            className={`text-5xl font-bold tabular-nums sm:text-6xl ${modeColor[mode]}`}
+            className={`text-4xl font-bold tabular-nums lg:text-5xl ${
+              isRunning ? "text-gray-50" : "text-gray-300"
+            }`}
+            style={{ textShadow: "0 2px 16px rgba(139,92,246,0.35)" }}
           >
             {displayTime}
           </span>
-          <span
-            className={`mt-2 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${modeBadge[mode]}`}
-          >
-            {MODE_LABELS[mode]}
-          </span>
+          {isRunning && (
+            <span className="mt-1 text-[10px] font-medium uppercase tracking-widest text-habeet-300">
+              focusing
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="flex items-center gap-3">
+      {/* Mode label beneath the ring */}
+      <p className="-mt-3 text-xs font-medium uppercase tracking-widest text-gray-400">
+        {isRunning ? MODE_LABELS[mode] : `${MODE_LABELS[mode]} ready`}
+      </p>
+
+      {/* Controls — side-by-side full-width on mobile */}
+            <div className="grid w-full grid-cols-2 gap-3 lg:flex lg:justify-center">
         <button
           onClick={isRunning ? onPause : onStart}
-          className="flex items-center gap-2 rounded-full bg-tomato-600 px-6 py-3 font-semibold text-white shadow-lg shadow-tomato-600/30 transition hover:bg-tomato-700 active:scale-95"
+          aria-label={isRunning ? "Pause timer" : "Start timer"}
+          data-testid="timer-start-pause-btn"
+          className="btn-primary w-full px-6 py-3 text-sm lg:w-auto"
         >
           {isRunning ? (
             <>
-              <Pause className="h-5 w-5" />
+              <Pause className="h-4 w-4" />
               Pause
             </>
           ) : (
             <>
-              <Play className="h-5 w-5" />
+              <Play className="h-4 w-4" />
               Start
             </>
           )}
         </button>
-        <button
+                <button
           onClick={onReset}
           aria-label="Reset timer"
-          className="flex items-center gap-2 rounded-full border border-gray-300 bg-white px-5 py-3 font-semibold text-gray-700 transition hover:bg-gray-50 active:scale-95 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+          data-testid="timer-reset-btn"
+          className="btn-secondary w-full px-5 py-3 text-sm lg:w-auto"
         >
-          <RotateCcw className="h-5 w-5" />
+          <RotateCcw className="h-4 w-4" />
           Reset
         </button>
+      </div>
+
+      {/* Quiet stat tiles — exactly 2 per row */}
+            <div className="mt-auto grid w-full grid-cols-2 gap-3 border-t border-white/5 pt-4">
+        <div data-testid="stat-current-streak" className="flex items-center gap-2.5 rounded-xl bg-surface-raised p-3 transition hover:bg-surface-overlay">
+          <span
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+              currentStreak > 0
+                ? "bg-habeet-500/20 text-habeet-300"
+                : "bg-white/5 text-gray-500"
+            }`}
+          >
+            <Flame className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-base font-semibold leading-none tabular-nums text-gray-100">
+              {currentStreak}
+              <span className="ml-1 text-[11px] font-normal text-gray-400">
+                day{currentStreak === 1 ? "" : "s"}
+              </span>
+            </p>
+            <p className="mt-1 truncate text-[11px] text-gray-500">Streak</p>
+          </div>
+        </div>
+                <div data-testid="stat-today-pct" className="flex items-center gap-2.5 rounded-xl bg-surface-raised p-3 transition hover:bg-surface-overlay">
+          <ProgressRing
+            progress={todayPct / 100}
+            size={34}
+            strokeWidth={4}
+            title="Today's completion"
+          />
+          <div className="min-w-0">
+            <p className="text-base font-semibold leading-none tabular-nums text-gray-100">
+              {todayPct}%
+            </p>
+            <p className="mt-1 truncate text-[11px] text-gray-500">Today</p>
+          </div>
+        </div>
       </div>
     </div>
   );

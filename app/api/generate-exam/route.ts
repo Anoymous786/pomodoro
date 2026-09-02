@@ -6,8 +6,10 @@ import { generateExam } from "@/lib/llm";
  *
  * Body: { taskName: string; context?: string }
  *
- * Generates a short (3-5 question) exam for ONE specific task — not the
- * whole day. Returns validated exam questions.
+ * Phase D: Generates EXACTLY 10 multiple-choice questions for ONE specific
+ * task — not the whole day. The questions are drawn strictly from the task's
+ * own content (e.g. "Install Django" -> Django install/setup specifics).
+ * Returns validated exam questions.
  */
 export async function POST(req: NextRequest) {
   let body: unknown;

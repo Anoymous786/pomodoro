@@ -25,6 +25,7 @@ const KIND_STYLES: Record<
 /**
  * Renders toasts dispatched via showToast() from anywhere in the app.
  * Mounted once in the root layout. Errors are never silent anymore.
+ * §P1: smooth slide-in/out (animate-toast-in / animate-toast-out).
  */
 export default function Toaster() {
   const [toasts, setToasts] = useState<ToastPayload[]>([]);
@@ -53,7 +54,7 @@ export default function Toaster() {
           <div
             key={t.id}
             role={t.kind === "error" ? "alert" : "status"}
-            className={`animate-pop-in pointer-events-auto flex items-start gap-2 rounded-xl border ${style.border} bg-white p-3 shadow-lg dark:bg-gray-800`}
+            className={`animate-toast-in pointer-events-auto flex items-start gap-2 rounded-xl border ${style.border} bg-white p-3 shadow-lg dark:bg-gray-800`}
           >
             <span className="mt-0.5 shrink-0">{style.icon}</span>
             <p className="flex-1 text-sm text-gray-800 dark:text-gray-100">
@@ -64,7 +65,7 @@ export default function Toaster() {
                 setToasts((prev) => prev.filter((x) => x.id !== t.id))
               }
               aria-label="Dismiss notification"
-              className="shrink-0 rounded p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700"
+              className="shrink-0 rounded p-1 text-gray-400 transition duration-150 hover:bg-white/5 hover:text-gray-200"
             >
               <X className="h-3.5 w-3.5" />
             </button>

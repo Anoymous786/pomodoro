@@ -1,0 +1,2 @@
+Select-String -LiteralPath 'C:\Users\utsi2\Desktop\pomodoro-dashboard\app\(main)\task\new\page.tsx' -Pattern 'PRESETS' | Select-Object -First 3 | ForEach-Object { "{0}: {1}" -f $_.LineNumber, $_.Line.Trim() }
+Select-String -LiteralPath 'C:\Users\utsi2\Desktop\pomodoro-dashboard\components\habeet\CircleCheckbox.tsx' -Pattern 'data-testid|role=|<button' | ForEach-Object { "{0}: {1}" -f $_.LineNumber, $_.Line.Trim() }

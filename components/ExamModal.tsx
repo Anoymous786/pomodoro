@@ -10,12 +10,16 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
-import { ExamQuestion, Task, TaskExamResult } from "@/lib/types";
+import { ExamQuestion, Task, TaskExamResult, TimingOutcome } from "@/lib/types";
+import { apiPost } from "@/lib/api";
 
 interface ExamModalProps {
   task: Task;
   /** Extra roadmap context (topic/day) so questions target this task. */
   context?: string;
+  /** Phase D: how this task's timing compared with its estimate (drives the
+   *  reflective prompt shown before the MCQ). */
+  timingOutcome?: TimingOutcome | null;
   onClose: () => void;
   /** Persists generated questions onto the task in localStorage. */
   onAttachQuestions: (taskId: string, questions: ExamQuestion[]) => void;
@@ -27,49 +31,79 @@ interface ExamModalProps {
   ) => Promise<TaskExamResult>;
 }
 
-type Phase = "generating" | "answering" | "grading" | "result";
+type Phase = "reflecting" | "generating" | "answering" | "grading" | "result";
+
+/** Phase D: one short, optional, non-graded reflection prompt chosen from the
+ *  task's timing outcome. Never shown for tasks we can't classify, but always
+ *  presented before the actual 10-question MCQ. */
+function reflectionPrompt(outcome: TimingOutcome | null | undefined): string {
+  switch (outcome) {
+    case "early":
+      return "What made this quicker than expected?";
+    case "late":
+      return "What took longer than planned?";
+    case "on-time":
+      return "What helped keep you right on schedule?";
+    default:
+      return "A quick note before the check — anything you noticed while doing this?";
+  }
+}
 
 /**
  * Per-task exam modal.
  *
- * Opens automatically when a task is marked complete. Shows a short
- * LLM-generated quiz (3-5 questions about THIS task only - not the whole
- * day), scores it, stores pass/needs-review alongside the task in
- * localStorage, and gently suggests a review when the score is low
- * (progress is never hard-blocked).
+ * Phase D: when a task is completed it opens automatically. It first asks ONE
+ * short, optional reflection tied to the timing outcome (early/on-time/late),
+ * then presents a 10-question multiple-choice exam generated ONLY from THIS
+ * task's content. The result (and the per-task timing record) live strictly on
+ * the task — never merged into the global dashboard.
  */
 export default function ExamModal({
   task,
   context,
+  timingOutcome,
   onClose,
   onAttachQuestions,
   onSubmitAnswers,
 }: ExamModalProps) {
+  const QUESTIONS_REQUIRED = 10;
+  const hasValidStoredExam =
+    !!task.exam &&
+    task.exam.questions.length === QUESTIONS_REQUIRED &&
+    task.exam.questions.every((q) => q.type === "multiple_choice");
+
   const [phase, setPhase] = useState<Phase>(
-    task.exam && task.exam.questions.length >= 3 ? "answering" : "generating"
+    hasValidStoredExam ? "answering" : "reflecting"
   );
   const [questions, setQuestions] = useState<ExamQuestion[]>(
     task.exam?.questions ?? []
   );
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [reflection, setReflection] = useState("");
   const [result, setResult] = useState<TaskExamResult | null>(
     task.examResult ?? null
   );
   const [error, setError] = useState<string | null>(null);
   const startedRef = useRef(false);
 
-  // Generate questions once when the task has no stored exam yet.
+  // Phase D: reflect first, then generate the MCQ exam once arriving at the
+  // "generating" step (triggered by the Continue button). If a task already has
+  // a valid stored 10-question exam, skip straight to answering.
   useEffect(() => {
+    if (phase !== "generating") return;
     if (startedRef.current) return;
-    if (task.exam && task.exam.questions.length >= 3) return;
+    if (hasValidStoredExam) {
+      startedRef.current = true;
+      setPhase("answering");
+      return;
+    }
     startedRef.current = true;
+    setError(null);
     (async () => {
-      setError(null);
       try {
-        const res = await fetch("/api/generate-exam", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ taskName: task.name, context }),
+        const res = await apiPost("/api/generate-exam", {
+          taskName: task.name,
+          context,
         });
         const data = (await res.json()) as {
           questions?: ExamQuestion[];
@@ -88,7 +122,16 @@ export default function ExamModal({
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [phase]);
+
+  // "Continue" from the reflection step -> move to the quiz (generating first).
+  const startQuiz = useCallback(() => {
+    if (hasValidStoredExam || questions.length === QUESTIONS_REQUIRED) {
+      setPhase("answering");
+      return;
+    }
+    setPhase("generating");
+  }, [hasValidStoredExam, questions.length]);
 
   const allAnswered =
     questions.length > 0 &&
@@ -117,13 +160,13 @@ export default function ExamModal({
       aria-label={`Exam for ${task.name}`}
     >
       <div
-        className="animate-pop-in flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl bg-white shadow-2xl dark:bg-gray-800"
+        className="animate-pop-in flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl bg-surface-raised shadow-2xl ring-1 ring-white/10"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-5 py-4 dark:border-gray-700">
+        <div className="flex items-start justify-between gap-3 border-b border-white/10 px-5 py-4">
           <div className="flex items-center gap-2">
-            <GraduationCap className="h-5 w-5 shrink-0 text-tomato-600" />
+            <GraduationCap className="h-5 w-5 shrink-0 text-habeet-600" />
             <div>
               <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
                 {phase === "result" ? "Your results" : "Quick knowledge check"}
@@ -136,7 +179,7 @@ export default function ExamModal({
           <button
             onClick={onClose}
             aria-label="Close exam"
-            className="rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700"
+            className="rounded-lg p-1.5 text-gray-400 transition hover:bg-white/5 hover:text-gray-200"
           >
             <X className="h-5 w-5" />
           </button>
@@ -153,11 +196,33 @@ export default function ExamModal({
             </p>
           )}
 
+          {phase === "reflecting" && (
+            <div className="space-y-4">
+              <div className="rounded-xl bg-surface p-4 ring-1 ring-white/5">
+                <p className="mb-3 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                  {reflectionPrompt(timingOutcome)}
+                </p>
+                <textarea
+                  value={reflection}
+                  onChange={(e) => setReflection(e.target.value)}
+                  rows={3}
+                  placeholder="Optional — skip if you'd rather jump straight to the check."
+                  className="w-full resize-y rounded-lg border border-white/10 bg-surface-overlay px-3 py-2 text-sm text-gray-100 outline-none transition focus:border-habeet-500 focus:ring-2 focus:ring-habeet-500/30 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                />
+                <p className="mt-2 text-xs text-gray-500">
+                  After this comes a quick 10-question multiple-choice check on{" "}
+                  <span className="font-semibold text-gray-300">{task.name}</span>
+                  .
+                </p>
+              </div>
+            </div>
+          )}
+
           {phase === "generating" && (
             <div className="flex flex-col items-center gap-3 py-10 text-center">
-              <Loader2 className="h-8 w-8 animate-spin text-tomato-500" />
+              <Loader2 className="h-8 w-8 animate-spin text-habeet-500" />
               <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
-                Cooking up a few questions about this task…
+                Cooking up 10 questions about this task…
               </p>
             </div>
           )}
@@ -167,11 +232,11 @@ export default function ExamModal({
               {questions.map((q, idx) => (
                 <div
                   key={q.id}
-                  className="rounded-xl border border-gray-100 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900"
+                  className="rounded-xl bg-surface p-4 ring-1 ring-white/5"
                 >
                   <p className="mb-3 text-sm font-semibold text-gray-900 dark:text-gray-100">
                     {idx + 1}. {q.prompt}
-                    <span className="ml-2 rounded-full bg-gray-200 px-2 py-0.5 align-middle text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:bg-gray-700 dark:text-gray-400">
+                    <span className="ml-2 rounded-full bg-surface-overlay px-2 py-0.5 align-middle text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:bg-gray-700 dark:text-gray-400">
                       {q.type === "multiple_choice" ? "Choose one" : "Short answer"}
                     </span>
                   </p>
@@ -184,8 +249,8 @@ export default function ExamModal({
                             key={opt}
                             className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${
                               selected
-                                ? "border-tomato-400 bg-tomato-50 text-tomato-800 dark:border-tomato-600 dark:bg-tomato-900/30 dark:text-tomato-200"
-                                : "border-gray-200 bg-white hover:border-tomato-300 dark:border-gray-600 dark:bg-gray-800"
+                                ? "border-habeet-400 bg-habeet-50 text-habeet-800 dark:border-habeet-600 dark:bg-habeet-900/30 dark:text-habeet-200"
+                                : "border-white/10 bg-surface-raised hover:border-habeet-400"
                             }`}
                           >
                             <input
@@ -195,7 +260,7 @@ export default function ExamModal({
                               onChange={() =>
                                 setAnswers((prev) => ({ ...prev, [q.id]: opt }))
                               }
-                              className="accent-tomato-600"
+                              className="accent-habeet-600"
                             />
                             <span className="text-gray-800 dark:text-gray-100">{opt}</span>
                           </label>
@@ -210,7 +275,7 @@ export default function ExamModal({
                       }
                       rows={3}
                       placeholder="Answer in a sentence or two…"
-                      className="w-full resize-y rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-tomato-500 focus:ring-2 focus:ring-tomato-500/30 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                      className="w-full resize-y rounded-lg border border-white/10 bg-surface-overlay px-3 py-2 text-sm text-gray-100 outline-none transition focus:border-habeet-500 focus:ring-2 focus:ring-habeet-500/30 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                     />
                   )}
                 </div>
@@ -220,7 +285,7 @@ export default function ExamModal({
 
           {phase === "grading" && (
             <div className="flex flex-col items-center gap-3 py-10 text-center">
-              <Loader2 className="h-8 w-8 animate-spin text-tomato-500" />
+              <Loader2 className="h-8 w-8 animate-spin text-habeet-500" />
               <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
                 Checking your answers…
               </p>
@@ -279,12 +344,21 @@ export default function ExamModal({
 
         </div>
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 border-t border-gray-200 px-5 py-4 dark:border-gray-700">
+        <div className="flex items-center justify-end gap-2 border-t border-white/10 px-5 py-4">
+          {phase === "reflecting" && (
+            <button
+              onClick={startQuiz}
+              className="flex items-center gap-2 rounded-lg bg-habeet-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-habeet-700 active:scale-95"
+            >
+              <GraduationCap className="h-4 w-4" />
+              Continue to the check
+            </button>
+          )}
           {phase === "answering" && (
             <button
               onClick={handleSubmit}
               disabled={!allAnswered}
-              className="flex items-center gap-2 rounded-lg bg-tomato-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-tomato-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex items-center gap-2 rounded-lg bg-habeet-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-habeet-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Send className="h-4 w-4" />
               Submit answers
@@ -293,7 +367,7 @@ export default function ExamModal({
           {phase === "result" && (
             <button
               onClick={onClose}
-              className="rounded-lg bg-tomato-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-tomato-700 active:scale-95"
+              className="rounded-lg bg-habeet-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-habeet-700 active:scale-95"
             >
               Done
             </button>

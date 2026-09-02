@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Pomodoro tomato-timer mark used as the app icon (app/icon.svg). -->
+  <circle cx="32" cy="36" r="22" fill="#e2543e"/>
+  <path d="M28 12h8l-2 8h-4z" fill="#4f8a3d"/>
+  <rect x="29.5" y="8" width="5" height="8" rx="2.5" fill="#7a3b2e"/>
+  <path d="M32 26v11l9 5" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

@@ -1,0 +1,69 @@
+import { NextRequest, NextResponse } from "next/server";
+import { generateRoadmapExam } from "@/lib/ai";
+
+/** Full-roadmap mock exam question count (item 4): ~20 MCQ. */
+const ROADMAP_EXAM_COUNT = 20;
+
+
+/**
+ * POST /api/generate-roadmap-exam
+ * Body: { topicLabel: string; dayTopics: {day,title}[]; questionCount?: number }
+ * Generates the proportional ~20-question mock exam covering the whole roadmap.
+ */
+export async function POST(req: NextRequest) {
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  }
+  const obj = (body ?? {}) as Record<string, unknown>;
+  const topicLabel =
+    typeof obj.topicLabel === "string" ? obj.topicLabel.trim() : "";
+  if (!topicLabel) {
+    return NextResponse.json(
+      { error: "Please provide a topicLabel." },
+      { status: 400 },
+    );
+  }
+  const dayTopics = Array.isArray(obj.dayTopics)
+    ? (obj.dayTopics as unknown[])
+        .map((d) => d as Record<string, unknown>)
+        .filter(
+          (d): d is Record<string, unknown> & { day: number; title: string } =>
+            typeof d?.day === "number" &&
+            typeof d?.title === "string" &&
+            !!d.title.trim(),
+        )
+        .map((d) => ({
+          day: Math.round(d.day),
+          title: d.title.trim().slice(0, 200),
+        }))
+        .slice(0, 60)
+    : [];
+  if (dayTopics.length === 0) {
+    return NextResponse.json(
+      { error: "Please provide dayTopics." },
+      { status: 400 },
+    );
+  }
+  const questionCount =
+    typeof obj.questionCount === "number" && obj.questionCount >= 1
+      ? Math.round(Math.min(obj.questionCount, 25))
+      : ROADMAP_EXAM_COUNT;
+
+  try {
+    const questions = await generateRoadmapExam({
+      topicLabel,
+      dayTopics,
+      questionCount,
+    });
+    return NextResponse.json({ questions });
+  } catch (err) {
+    const message =
+      err instanceof Error
+        ? err.message
+        : "Failed to generate the roadmap exam.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

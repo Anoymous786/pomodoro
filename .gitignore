@@ -1,3 +1,13 @@
 ﻿node_modules
 .env.local
 .next
+
+# --- AWS infrastructure ---
+infrastructure/.terraform/
+infrastructure/.terraform.lock.hcl
+infrastructure/*.tfstate*
+infrastructure/build/
+infrastructure/test-out/
+*.tfvars
+crash.log
+*.log

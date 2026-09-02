@@ -1,0 +1,3 @@
+{
+  "body": "{\"taskName\":\"Explain Docker image layers\",\"questions\":[{\"id\":\"q1\",\"prompt\":\"What is a Docker layer?\",\"type\":\"short_answer\",\"referenceAnswer\":\"An immutable filesystem diff produced by an instruction in the Dockerfile.\"}],\"answers\":{\"q1\":\"Layers are cached filesystem diffs from each Dockerfile step.\"}}"
+}

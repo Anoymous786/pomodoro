@@ -1,0 +1,120 @@
+﻿3141: 
+3142:   /** Starts counting practice time for a step (idle/paused/finished ΓåÆ run). */
+3143:   const startStepTimer = useCallback((taskId: string, stepId: string) => {
+3144:     const now = Date.now();
+3145:     setState((prev) => ({
+3146:       ...prev,
+3147:       practiceTasks: prev.practiceTasks.map((t) =>
+3148:         t.id === taskId
+3149:           ? {
+3150:               ...t,
+3151:               roadmap: (t.roadmap ?? []).map((s) => {
+3152:                 if (s.id !== stepId) return s;
+3153:                 return {
+3154:                   ...s,
+3155:                   timerStatus: "running",
+3156:                   startedAt: now,
+3157:                 };
+3158:               }),
+3159:             }
+3160:           : t,
+3161:       ),
+3162:     }));
+3163:   }, []);
+3164: 
+3165:   /** Pauses a running step, folding the current run into practicedSeconds. */
+3166:   const pauseStepTimer = useCallback((taskId: string, stepId: string) => {
+3167:     const now = Date.now();
+3168:     setState((prev) => ({
+3169:       ...prev,
+3170:       practiceTasks: prev.practiceTasks.map((t) =>
+3171:         t.id === taskId
+3172:           ? {
+3173:               ...t,
+3174:               roadmap: (t.roadmap ?? []).map((s) => {
+3175:                 if (s.id !== stepId || s.timerStatus !== "running") return s;
+3176:                 const added = Math.max(
+3177:                   0,
+3178:                   Math.round((now - (s.startedAt ?? now)) / 1000),
+3179:                 );
+3180:                 return {
+3181:                   ...s,
+3182:                   practicedSeconds: s.practicedSeconds + added,
+3183:                   timerStatus: "paused",
+3184:                   startedAt: undefined,
+3185:                 };
+3186:               }),
+3187:             }
+3188:           : t,
+3189:       ),
+3190:     }));
+3191:   }, []);
+3192: 
+3193:   /** Resumes a paused step: starts a fresh run from the frozen total. */
+3194:   const resumeStepTimer = useCallback((taskId: string, stepId: string) => {
+3195:     const now = Date.now();
+3196:     setState((prev) => ({
+3197:       ...prev,
+3198:       practiceTasks: prev.practiceTasks.map((t) =>
+3199:         t.id === taskId
+3200:           ? {
+3201:               ...t,
+3202:               roadmap: (t.roadmap ?? []).map((s) => {
+3203:                 if (s.id !== stepId || s.timerStatus !== "paused") return s;
+3204:                 return {
+3205:                   ...s,
+3206:                   timerStatus: "running",
+3207:                   startedAt: now,
+3208:                 };
+3209:               }),
+3210:             }
+3211:           : t,
+3212:       ),
+3213:     }));
+3214:   }, []);
+3215: 
+3216:   /**
+3217:    * Finish / end a step's timer. Folds any live run into practicedSeconds,
+3218:    * clears the running state, marks the step done and ΓÇö when that was the
+3219:    * last open step ΓÇö auto-completes the task's day and the task itself
+3220:    * (┬º4 day auto-completion, ┬º5 task auto-completion).
+3221:    */
+3222:   const finishStepTimer = useCallback(
+3223:     (taskId: string, stepId: string) => {
+3224:       const now = Date.now();
+3225:       // ┬º6 TIME VALIDATION: finishing early is allowed, but it can never
+3226:       // complete the step until the minimum practice time is reached. When
+3227:       // the requirement is not met we REFUSE the finish and keep the timer
+3228:       // running so the learner can simply continue studying.
+3229:       const finishTask = (state.practiceTasks as PracticeTask[]).find(
+3230:         (t) => t.id === taskId,
+3231:       );
+3232:       const finishStep = finishTask?.roadmap?.find((s) => s.id === stepId);
+3233:       if (
+3234:         finishStep &&
+3235:         !finishStep.isDone &&
+3236:         typeof window !== "undefined" &&
+3237:         !(window as unknown as { __MIN_PRACTICE_OVERRIDE__?: boolean }).__MIN_PRACTICE_OVERRIDE__
+3238:       ) {
+3239:         const live =
+3240:           finishStep.timerStatus === "running" &&
+3241:           typeof finishStep.startedAt === "number"
+3242:             ? Math.max(0, Math.round((now - finishStep.startedAt) / 1000))
+3243:             : 0;
+3244:         if (!meetsMinPractice(finishStep, live)) {
+3245:           showToast(
+3246:             `You have not completed the minimum required practice time for this step (${minPracticeLabel(finishStep.estimated_minutes)} needed). Keep studying ΓÇö the timer is still running.`,
+3247:             "info",
+3248:           );
+3249:           return;
+3250:         }
+3251:       }
+3252:       setState((prev) => ({
+3253:         ...prev,
+3254:         practiceTasks: prev.practiceTasks.map((t) => {
+3255:           if (t.id !== taskId) return t;
+3256:           const nextRoadmap = (t.roadmap ?? []).map((s) => {
+3257:             if (s.id !== stepId) return s;
+3258:             const added =
+3259:               s.timerStatus === "running" && typeof s.startedAt === "number"
+3260:                 ? Math.max(0, Math.round((now - s.startedAt) / 1000))

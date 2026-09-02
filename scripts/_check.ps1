@@ -1,0 +1,1 @@
+try { $r = Invoke-WebRequest -Uri 'http://localhost:3000' -UseBasicParsing -TimeoutSec 5; Write-Output ('SERVER UP: ' + $r.StatusCode) } catch { Write-Output ('SERVER DOWN: ' + $_.Exception.Message) }

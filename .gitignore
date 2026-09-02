@@ -11,3 +11,8 @@ infrastructure/test-out/
 *.tfvars
 crash.log
 *.log
+
+# Terraform generated files
+.terraform/
+*.tfstate
+*.tfstate.*

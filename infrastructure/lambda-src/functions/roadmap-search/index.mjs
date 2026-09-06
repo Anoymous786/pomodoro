@@ -16,8 +16,11 @@ import { doc, QueryCommand, ScanCommand } from "./aws.mjs";
 import { json, serverError } from "./respond.mjs";
 
 // Summaries only — never ship whole roadmap documents back from a search.
+// `status` is a DynamoDB RESERVED KEYWORD, so it must be aliased (#s) in the
+// projection — same reason #sk is aliased below. Bare `status` here makes
+// DynamoDB reject the whole query with a ValidationException.
 const PROJECTION =
-  "user_id, #sk, roadmap_id, topic_name, badge_reward, status, created_at";
+  "user_id, #sk, roadmap_id, topic_name, badge_reward, #s, created_at";
 
 export const handler = async (event) => {
   const params = event.queryStringParameters ?? {};
@@ -36,7 +39,7 @@ export const handler = async (event) => {
         new ScanCommand({
           TableName: process.env.ROADMAPS_TABLE,
           FilterExpression: "#t = :roadmap AND contains(topic_lower, :q)",
-          ExpressionAttributeNames: { "#t": "type", "#sk": "sk" },
+          ExpressionAttributeNames: { "#t": "type", "#sk": "sk", "#s": "status" },
           ExpressionAttributeValues: {
             ":roadmap": "roadmap",
             ":q": topic.toLowerCase(),
@@ -51,7 +54,7 @@ export const handler = async (event) => {
         new QueryCommand({
           TableName: process.env.ROADMAPS_TABLE,
           KeyConditionExpression: "#u = :u AND begins_with(#sk, :p)",
-          ExpressionAttributeNames: { "#u": "user_id", "#sk": "sk" },
+          ExpressionAttributeNames: { "#u": "user_id", "#sk": "sk", "#s": "status" },
           ExpressionAttributeValues: { ":u": userId, ":p": "ROADMAP#" },
           ProjectionExpression: PROJECTION,
           ScanIndexForward: false, // newest first

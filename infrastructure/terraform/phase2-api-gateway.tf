@@ -74,6 +74,8 @@ locals {
     "POST /api/focus-logs"            = { fn = "focus-logs" }
     "GET /api/progress"               = { fn = "progress" }
     "PUT /api/progress"               = { fn = "progress" } # one fn, two routes
+    "GET /api/skill-profile"          = { fn = "skill-profile" }
+    "POST /api/skill-profile"         = { fn = "skill-profile" } # one fn, two routes
     "POST /api/uploads/presign"       = { fn = "get-upload-url" }
     "GET /api/uploads/text"           = { fn = "get-upload-url" } # one fn, two routes
   }

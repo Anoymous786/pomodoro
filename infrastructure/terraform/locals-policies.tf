@@ -51,6 +51,15 @@ locals {
       Resource = [aws_dynamodb_table.roadmaps.arn]
     }]
 
+    # skill-profile lambda: GET queries SKILL# items, POST upserts them.
+    # Exactly the two DynamoDB actions it calls — nothing more.
+    ddb_skills_rw = [{
+      Sid      = "SkillProfilesReadWrite"
+      Effect   = "Allow"
+      Action   = ["dynamodb:Query", "dynamodb:PutItem"]
+      Resource = [aws_dynamodb_table.roadmaps.arn]
+    }]
+
     ddb_cache_rw = [{
       Sid      = "LlmCacheTableReadWrite"
       Effect   = "Allow"

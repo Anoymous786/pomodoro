@@ -39,8 +39,7 @@ resource "aws_lambda_event_source_mapping" "worker_from_sqs" {
   event_source_arn = aws_sqs_queue.roadmap_jobs.arn
   enabled          = true
 
-  batch_size             = 1 # one job at a time keeps failure isolation simple
-  maximum_retry_attempts = 2
+  batch_size = 1 # one job at a time keeps failure isolation simple
 
   # Worker returns { batchItemFailures } — only failed messages are retried.
   function_response_types = ["ReportBatchItemFailures"]

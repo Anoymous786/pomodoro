@@ -16,6 +16,7 @@ locals {
     llm_keys           = { LLM_PROVIDER_PARAM = aws_ssm_parameter.llm_provider.name, GROQ_API_KEY_PARAM = "${local.ssm_secrets_path}/groq_api_key", GEMINI_API_KEY_PARAM = "${local.ssm_secrets_path}/gemini_api_key" }
     ddb_roadmaps_rw    = { ROADMAPS_TABLE = aws_dynamodb_table.roadmaps.name }
     ddb_roadmaps_ro    = { ROADMAPS_TABLE = aws_dynamodb_table.roadmaps.name }
+    ddb_skills_rw      = { ROADMAPS_TABLE = aws_dynamodb_table.roadmaps.name }
     ddb_search         = { ROADMAPS_TABLE = aws_dynamodb_table.roadmaps.name }
     ddb_cache_rw       = { CACHE_TABLE = aws_dynamodb_table.llm_cache.name, CACHE_TTL_SECONDS = tostring(var.llm_cache_ttl_seconds) }
     sqs_send           = { JOBS_QUEUE_URL = aws_sqs_queue.roadmap_jobs.url }
@@ -97,6 +98,14 @@ locals {
     "progress" = {
       desc    = "GET/PUT /api/progress — durable per-task progress docs (conditional rev-guarded writes)"
       caps    = ["ddb_roadmaps_rw"]
+      timeout = 12
+      memory  = 256
+    }
+
+    # ---- §13: durable per-topic skill profiles (SKILL# items) ---------------
+    "skill-profile" = {
+      desc    = "GET/POST /api/skill-profile — validated per-topic skill profile storage in the roadmaps table (SKILL# items)"
+      caps    = ["ddb_skills_rw"]
       timeout = 12
       memory  = 256
     }

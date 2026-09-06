@@ -29,14 +29,14 @@ data "archive_file" "lambda" {
   # All functions are dependency-free ESM on the AWS SDK v3 bundled in the
   # nodejs20.x runtime.
   dynamic "source" {
-    for_each = sort(concat(
+    for_each = concat(
       [for f in fileset("${path.module}/../lambda-src/functions/${each.key}", "**") :
         { content = file("${path.module}/../lambda-src/functions/${each.key}/${f}"), filename = f }
       ],
       [for f in local.shared_files :
         { content = file("${path.module}/../lambda-src/shared/${f}"), filename = f }
       ]
-    ))
+    )
 
     content {
       content  = source.value.content
@@ -127,3 +127,4 @@ resource "aws_lambda_function" "fn" {
 
   tags = { Function = each.key }
 }
+

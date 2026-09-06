@@ -72,7 +72,9 @@ async function handlePresign(obj) {
     expiresIn: 900,
     // The client MUST send exactly this header or S3 rejects the signature.
     contentType,
-    pollTextUrl: `/api/uploads/text?key=${encodeURIComponent(key)}`,
+    // /api/uploads/text only accepts extractor outputs (extracted/<key>.json —
+    // see safeExtractedKey), so poll the EXTRACTED key, not the uploads key.
+    pollTextUrl: `/api/uploads/text?key=${encodeURIComponent(`extracted/${key}.json`)}`,
   });
 }
 
@@ -106,8 +108,11 @@ async function handleReadText(query) {
   const res = await s3.send(
     new GetObjectCommand({ Bucket: process.env.RESUME_BUCKET, Key: target })
   );
+  // transformToByteArray() returns a BARE Uint8Array; Buffer.concat() needs an
+  // ARRAY of buffers, so wrap it in [...]. Bare passing throws
+  // "The list argument must be an instance of Array" on the Node 20 runtime.
   const body = JSON.parse(
-    Buffer.concat(await res.Body.transformToByteArray()).toString("utf8")
+    Buffer.concat([await res.Body.transformToByteArray()]).toString("utf8")
   );
   return json(200, { key: query.key, pending: false, ...body });
 }

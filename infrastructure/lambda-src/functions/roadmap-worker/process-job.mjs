@@ -48,22 +48,44 @@ import {
  *   E : every day ends up with a "search" string the frontend renders as a
  *       YouTube search link.
  */
+/**
+ * § malformed-JSON hardening (mirror of lib/llm.ts callWithJsonRetry):
+ * A model sometimes wraps JSON in prose/fences even under a strict prompt.
+ * Instead of failing the job on the FIRST parse error, we retry ONCE with a
+ * sharpened one-line instruction. Strictly one retry — after that the error
+ * propagates and the existing SQS redrive (maxReceiveCount=3 -> DLQ) applies
+ * unchanged. Never loops.
+ */
+const STRICT_RETRY_SUFFIX =
+  "\n\nCRITICAL: You did not return a parseable JSON object. Return ONLY a single valid JSON object matching the schema exactly. No prose, no explanations, no markdown fences, nothing outside the JSON. First char \"{\", last char \"}\".";
+
 async function generateRoadmapPlan(topic, context) {
   const dayCount = requestedDayCount(context);
   const budget = minutesPerDay(context);
 
   const runOnce = (prompt) => callProvider(ROADMAP_SYSTEM_PROMPT, prompt);
 
+  /** Single JSON-parse attempt with a strict one-shot retry on malformed JSON. */
+  const runParsed = async (prompt) => {
+    try {
+      return parseRoadmapResponse(await runOnce(prompt));
+    } catch (err) {
+      if (!/valid JSON|schema/i.test(err?.message ?? "")) throw err;
+      // ONE stricter retry — never more. Falls through to SQS/DLQ on failure.
+      return parseRoadmapResponse(await runOnce(`${prompt}${STRICT_RETRY_SUFFIX}`));
+    }
+  };
+
   let basePrompt = buildUserPrompt(topic, context);
 
-  // First attempt.
-  let roadmap = parseRoadmapResponse(await runOnce(basePrompt));
+  // First attempt (with the one-shot strict retry above).
+  let roadmap = await runParsed(basePrompt);
   let dayOk = validateDayCount(roadmap, dayCount);
 
   if (!dayOk && dayCount !== null) {
     // Retry ONCE with an explicit correction note.
     basePrompt = `${basePrompt}\n\nCORRECTION AFTER THE PREVIOUS ATTEMPT: You returned ${roadmap.days.length} days, but the learner asked for EXACTLY ${dayCount} days. Re-generate the ENTIRE roadmap so the "days" array contains exactly ${dayCount} entries (day 1 .. day ${dayCount}). No fewer, no more.`;
-    roadmap = parseRoadmapResponse(await runOnce(basePrompt));
+    roadmap = await runParsed(basePrompt);
     dayOk = validateDayCount(roadmap, dayCount);
     if (!dayOk) {
       throw new Error(

@@ -1,0 +1,30 @@
+# --- dependency / build caches (rebuilt inside the image) ---
+node_modules
+.next
+out
+
+# --- version control & editor ---
+.git
+.gitignore
+.vscode
+
+# --- secrets: NEVER bake these into the image ---
+.env
+.env.*
+!.env.example
+
+# --- infrastructure & deployment assets (not needed in the app image) ---
+infrastructure
+aws-*.txt
+apply-*.txt
+plan-*.txt
+tfplan
+
+# --- docs, logs, scratch ---
+*.log
+*.md
+!README.md
+dev-server*.log
+build-check.log
+scripts
+.DS_Store

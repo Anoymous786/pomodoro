@@ -76,8 +76,14 @@ locals {
     "PUT /api/progress"               = { fn = "progress" } # one fn, two routes
     "GET /api/skill-profile"          = { fn = "skill-profile" }
     "POST /api/skill-profile"         = { fn = "skill-profile" } # one fn, two routes
-    "POST /api/uploads/presign"       = { fn = "get-upload-url" }
-    "GET /api/uploads/text"           = { fn = "get-upload-url" } # one fn, two routes
+    # ---- parity: UI routes ported from app/api/* to Lambdas ----
+    "POST /api/chat"                    = { fn = "chat" }
+    "POST /api/generate-checkin"        = { fn = "generate-checkin" }
+    "POST /api/generate-day-assessment" = { fn = "generate-day-assessment" }
+    "POST /api/generate-roadmap-exam"   = { fn = "generate-roadmap-exam" }
+    "POST /api/roadmap-edit"            = { fn = "roadmap-edit" }
+    "POST /api/uploads/presign"         = { fn = "get-upload-url" }
+    "GET /api/uploads/text"             = { fn = "get-upload-url" } # one fn, two routes
   }
 
   # One integration per DISTINCT function (routes may share one).

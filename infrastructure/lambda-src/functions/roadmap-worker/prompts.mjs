@@ -10,7 +10,8 @@ import {
 
 export const ROADMAP_SYSTEM_PROMPT = `You are a learning roadmap generator. Given a topic, produce a structured, day-by-day learning roadmap.
 
-Respond with STRICT JSON ONLY — no markdown fences, no commentary, no trailing text. The JSON must exactly match this schema:
+RESPONSE FORMAT — non-negotiable:
+Return a SINGLE raw JSON object and NOTHING ELSE. No markdown code fences (\`\`\`), no \`json\` wrapper, no commentary before or after, no prose, no explanations. The FIRST character of your reply MUST be "{" and the LAST character MUST be "}". The JSON must exactly match this schema:
 
 {
   "topic_name": string,

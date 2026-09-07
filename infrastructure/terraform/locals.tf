@@ -110,6 +110,38 @@ locals {
       memory  = 256
     }
 
+    # ---- parity: UI routes ported from app/api/* to Lambdas ----------------
+    "chat" = {
+      desc    = "POST /api/chat — study assistant RAG reply using the user's roadmap/progress context"
+      caps    = ["llm_keys", "ddb_roadmaps_ro"]
+      timeout = 30
+      memory  = 512
+    }
+    "generate-checkin" = {
+      desc    = "POST /api/generate-checkin — post-task check-in question (LLM, strict retry-once)"
+      caps    = ["llm_keys"]
+      timeout = 29
+      memory  = 256
+    }
+    "generate-day-assessment" = {
+      desc    = "POST /api/generate-day-assessment — end-of-day assessment questions (LLM)"
+      caps    = ["llm_keys"]
+      timeout = 29
+      memory  = 256
+    }
+    "generate-roadmap-exam" = {
+      desc    = "POST /api/generate-roadmap-exam — roadmap day exam with 5 questions (LLM)"
+      caps    = ["llm_keys"]
+      timeout = 29
+      memory  = 256
+    }
+    "roadmap-edit" = {
+      desc    = "POST /api/roadmap-edit — LLM roadmap edit (summary/insertBefore/newTaskName), no persistence server-side"
+      caps    = ["llm_keys"]
+      timeout = 29
+      memory  = 256
+    }
+
     # ---- Phase 3: resume uploads -------------------------------------------
     "get-upload-url" = {
       desc    = "POST /api/uploads/presign + GET /api/uploads/text — pre-signed PUTs and extracted-text reads"

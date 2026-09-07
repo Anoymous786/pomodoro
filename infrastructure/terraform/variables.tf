@@ -63,3 +63,15 @@ variable "llm_cache_ttl_seconds" {
   type        = number
   default     = 86400
 }
+
+variable "image_tag" {
+  description = "ECR image tag the ECS task definition should run (pushed in Phase 2)."
+  type        = string
+  default     = "v1.0.1"
+}
+
+variable "desired_count" {
+  description = "Fargate tasks to keep running. Set to 0 when idle to stop all Fargate billing."
+  type        = number
+  default     = 1
+}

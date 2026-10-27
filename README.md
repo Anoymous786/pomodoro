@@ -1,7 +1,5 @@
-Absolutely. Copy-paste this **entire block** directly into your root `README.md`. I’ve kept the important AWS/interview details but removed the unnecessary depth.
-
 ````markdown
-# 🍅 Pomodoro Dashboard
+# 🍅 Pomodoro Dashboard (currently paused due to AWS credits, service will start soon)
 
 **Pomodoro Dashboard** is an AI-powered productivity and learning platform that combines a Pomodoro focus timer, task management, adaptive learning roadmaps, assessments, progress tracking, skill profiles, resume-based planning, and a grounded AI Study Assistant.
 
@@ -11,11 +9,11 @@ The repository also contains a serverless AWS backend using **API Gateway, Lambd
 
 ---
 
-## 🚀 Live Demo
+## 🚀 Live Demo (currently paused due to AWS credits, service will start soon)
 
-### Application
+### Application (currently paused due to AWS credits, service will start soon)
 
-http://pomodoro-dashboard-alb-1223371936.us-east-1.elb.amazonaws.com
+http://pomodoro-dashboard-alb-1223371936.us-east-1.elb.amazonaws.com       (currently paused due to AWS credits, service will start soon)
 
 > ⚠️ The current demo is served over HTTP. HTTPS/custom domain is planned for a future deployment phase.
 
